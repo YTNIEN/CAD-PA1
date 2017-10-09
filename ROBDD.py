@@ -82,11 +82,11 @@ class ROBDD:
                     input_vtx = self.add_input_vtx(var)
                     print('    Create new input vertex: {} ({})'.format(input_vtx.var, literal))
                 assert input_vtx == self.uni_tbl[(var, self.static_low, self.static_high)], 'Error in setting input vertex'
-                literal_to_vtx[literal] = self.uni_tbl[(var, self.static_low, self.static_high)]
+                literal_to_vtx[literal] = input_vtx
                 # create inverted inputs e.g. literal 3, 5, 7...
                 inv_input_vtx = self.add_inv_vtx(input_vtx)
-                literal_to_vtx[str(int(literal)+1)] = self.uni_tbl[(var, self.static_low, self.static_high)]
-                print('    Create neg input vertex: {} ({})'.format(inv_input_vtx.var, str(int(literal)+1)))
+                literal_to_vtx[str(int(literal)+1)] = inv_input_vtx
+                print('    Set neg input vertex: {} ({})'.format(inv_input_vtx.var, str(int(literal)+1)))
 
             # second parsing, skip input and output lines and parse only AND lines
             f.seek(0)
@@ -94,11 +94,34 @@ class ROBDD:
                 f.readline() # header, input or output lines
             # parse AND lines
             for _ in range(and_cnt):
-                # TODO: also consider the condition, where out_literal is a odd number
-                # TODO: consider that literals of input are not set and add to "literal_to_vtx" yet
-                # AND
-                pass
-                # NOT
+                out_literal, in_literal1, in_literal2 = f.readline().split()[0:3]
+                print('{} {} {}'.format(out_literal, in_literal1, in_literal2))
+                if in_literal1 in literal_to_vtx and in_literal2 in literal_to_vtx:
+                    # AND
+                    print('    In1 {}'.format(literal_to_vtx[in_literal1].ite_expr))
+                    print('    In2 {}'.format(literal_to_vtx[in_literal2].ite_expr))
+                    new_vtx = self.ite(literal_to_vtx[in_literal1], literal_to_vtx[in_literal2], self.static_low, 'a')
+                    # NOT
+                    new_inv_vtx = self.add_inv_vtx(new_vtx)
+                    if int(out_literal) % 2 == 0:
+                        literal_to_vtx[out_literal] = new_vtx
+                        literal_to_vtx[str(int(out_literal)+1)] = new_inv_vtx
+                        print('    Set vertex: {} ({})'.format(new_vtx.ite_expr, str(int(out_literal))))
+                        print('    Set vertex: {} ({})'.format(new_inv_vtx.ite_expr, str(int(out_literal)+1)))
+                    else:
+                        # out_literal is a odd number
+                        literal_to_vtx[str(int(out_literal)-1)] = new_vtx
+                        literal_to_vtx[out_literal] = new_inv_vtx
+                        print('    Set vertex: {} ({})'.format(new_vtx.ite_expr, str(int(out_literal)-1)))
+                        print('    Set vertex: {} ({})'.format(new_inv_vtx.ite_expr, str(int(out_literal))))
+                else:
+                    # TODO: consider that literals of input are not set and add to "literal_to_vtx" yet
+                    if in_literal1 not in literal_to_vtx:
+                        # TODO: add to uncreated_
+                        pass
+                    if in_literal2 not in literal_to_vtx:
+                        # TODO:
+                        pass
 
     def add_input_vtx(self, var):
         '''Add input vertex if not created.
@@ -128,9 +151,11 @@ class ROBDD:
             return g_vtx
         else:
             cur_var = f_vtx.var
+            # restrict to high
             f_high_vtx = self.restrict(f_vtx, cur_var, 'high')
             g_high_vtx = self.restrict(g_vtx, cur_var, 'high')
             h_high_vtx = self.restrict(h_vtx, cur_var, 'high')
+            # restrict to low
             f_low_vtx = self.restrict(f_vtx, cur_var, 'low')
             g_low_vtx = self.restrict(g_vtx, cur_var, 'low')
             h_low_vtx = self.restrict(h_vtx, cur_var, 'low')
@@ -144,12 +169,12 @@ class ROBDD:
                     ite_expr = 'ITE[{}, {}, {}]'.format(cur_var, new_high_vtx.ite_expr,
                                                         new_low_vtx.ite_expr)
                     new_vtx = Vertex(cur_var, ite_expr, new_low_vtx, new_high_vtx)
+                    print("        Create new vertex: {}, lo: {}, hi: {}, as {}".format(cur_var, new_low_vtx.ite_expr,  new_high_vtx.ite_expr, ite_expr))
                     self.uni_tbl[(cur_var, new_low_vtx, new_high_vtx)] = new_vtx
                     self.vertices.append(new_vtx)
                     return new_vtx
                 else:
                     return self.uni_tbl[(cur_var, new_low_vtx, new_high_vtx)]
-
 
     def restrict(self, f_vtx, res_var, res_value):
         '''Restrict a function (vertex) to high (right child).
