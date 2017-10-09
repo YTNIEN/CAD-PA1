@@ -17,17 +17,19 @@ class Vertex:
 class ROBDD:
     '''A ROBDD to represent the Boolean functions of input1 and input2.
     '''
-    def __init__(self, inputs):
-        self.input1 = inputs[0]
-        self.input2 = inputs[1]
-        self.input3 = inputs[2]
+    def __init__(self, argv):
+        self.input1 = argv[0]
+        self.input2 = argv[1]
+        self.input3 = argv[2]
+        self.output = argv[3]
         self.vertices = []
         self.uni_tbl = {} # (var, low_v, high_v) -> vertex
         self.static_low = None
         self.static_high = None
         self.init_static_vertex() # initialize s0 (low) and s1 (high) for ROBDD
-        self.f_vtx = None # output of input1
-        self.g_vtx = None # output of input2
+        self.g_vtx = None # output of input1
+        self.h_vtx = None # output of input2
+        self.q_vtx = None # output of input3
 
     def init_static_vertex(self):
         '''Create 0 and 1 vertices.
@@ -38,13 +40,18 @@ class ROBDD:
         self.vertices.append(self.static_low)
 
     def run(self):
-        '''1. Read AIG from two input files.
-        2. Dump corresponding two ROBDD in ITE format.
+        '''1. Read in AIGs from <input1> and <input2>
+        2. Construct ROBDD based on the AIGs
+        3. Read in Boolean function of 'g' and 'h' in <input3>
+        4. Represent this Boolean function using ITE and ROBDD
+        5. Dump in ITE format to <output>
         '''
-        self.f_vtx = self.build_from_aig(self.input1)
-        self.g_vtx = self.build_from_aig(self.input2)
-        print("Input1: {}".format(self.f_vtx.ite_expr))
-        print("Input2: {}".format(self.g_vtx.ite_expr))
+        self.g_vtx = self.build_from_aig(self.input1)
+        self.h_vtx = self.build_from_aig(self.input2)
+        print("Input1: {}".format(self.g_vtx.ite_expr))
+        print("Input2: {}".format(self.h_vtx.ite_expr))
+        self.q_vtx = self.build_from_bool_func(self.input3)
+        self.dump()
 
     def build_from_aig(self, aig_file):
         '''Build ROBDD described in a specified aig file.
@@ -58,7 +65,7 @@ class ROBDD:
             print('Parsing {}'.format(aig_file))
             header = f.readline()
             cnts = (int(cnt) for cnt in header.split()[1:])
-            (max_var_cnt, in_cnt, latch_cnt, out_cnt, and_cnt)  = cnts
+            (max_var_cnt, in_cnt, latch_cnt, out_cnt, and_cnt) = cnts
             if latch_cnt != 0:
                 raise NotImplementedError('Expected latch number: 0, got {}'.format(latch_cnt))
             # get input literals
@@ -188,13 +195,13 @@ class ROBDD:
         else:
             cur_var = var
             # restrict to high
-            f_high_vtx = self.restrict(f_vtx, cur_var, 'high')
-            g_high_vtx = self.restrict(g_vtx, cur_var, 'high')
-            h_high_vtx = self.restrict(h_vtx, cur_var, 'high')
+            f_high_vtx = self._restrict(f_vtx, cur_var, 'high')
+            g_high_vtx = self._restrict(g_vtx, cur_var, 'high')
+            h_high_vtx = self._restrict(h_vtx, cur_var, 'high')
             # restrict to low
-            f_low_vtx = self.restrict(f_vtx, cur_var, 'low')
-            g_low_vtx = self.restrict(g_vtx, cur_var, 'low')
-            h_low_vtx = self.restrict(h_vtx, cur_var, 'low')
+            f_low_vtx = self._restrict(f_vtx, cur_var, 'low')
+            g_low_vtx = self._restrict(g_vtx, cur_var, 'low')
+            h_low_vtx = self._restrict(h_vtx, cur_var, 'low')
             next_var = chr(ord(cur_var)+1)
             new_high_vtx = self.ite(f_high_vtx, g_high_vtx, h_high_vtx, next_var)
             new_low_vtx = self.ite(f_low_vtx, g_low_vtx, h_low_vtx, next_var)
@@ -212,7 +219,7 @@ class ROBDD:
                 else:
                     return self.uni_tbl[(cur_var, new_low_vtx, new_high_vtx)]
 
-    def restrict(self, f_vtx, res_var, res_value):
+    def _restrict(self, f_vtx, res_var, res_value):
         '''Restrict a function (vertex) to high (right child).
         f_vtx: func
         res_var: a char
@@ -230,11 +237,63 @@ class ROBDD:
         else:
             raise TypeError("Expected lower restriction variable")
 
-    def dump(self, file):
+    def build_from_bool_func(self, file):
+        '''Parse Boolean function in input3 and construct ITE expression.
+        '''
+        with open(file, 'r') as f:
+            expr = f.readline().strip()
+        print(expr)
+        and_exprs = expr.split('+')
+        print(and_exprs)
+        and_results = [] # the resut after applying AND
+        for mul_expr in and_exprs:
+            print(mul_expr)
+            vars_ = mul_expr.split('*')
+            print('-> {}'.format(vars_))
+
+            itervars = iter(vars_)
+            first_var = next(itervars)
+            vtx = self.get_root_vtx(first_var)
+            for var in itervars:
+                next_vtx = self.get_root_vtx(var)
+                print('{} * {}'.format(vtx.ite_expr, next_vtx.ite_expr))
+                vtx = self.ite(vtx, next_vtx, self.static_low, 'a')
+                print('  -> {}'.format(vtx.ite_expr))
+            and_results.append(vtx)
+        iter_or_rslt = iter(and_results)
+        vtx = next(iter_or_rslt)
+        for res in iter_or_rslt:
+            vtx = self.ite(vtx, self.static_high, res, 'a')
+        print(vtx.ite_expr)
+        return vtx
+
+    def get_root_vtx(self, var_str):
+        '''Get the vertex of root given string like 'g', 'h', "g'", "h'".
+        '''
+        var_str = var_str.strip()
+        if var_str.endswith("'") and len(var_str) != 2:
+            tmp = var_str.split()
+            var_str = ''.join(tmp)
+        if var_str == 'g':
+            return self.g_vtx
+        elif var_str == 'h':
+            return self.h_vtx
+        elif var_str == "g'":
+            return self.ite(self.g_vtx, self.static_low, self.static_high, 'a')
+        elif var_str == "h'":
+            return self.ite(self.h_vtx, self.static_low, self.static_high, 'a')
+        else:
+            raise TypeError('''Expected one of "g", "h", "g'" and "h'", got "{}"'''.format(var_str))
+
+    def dump(self):
         '''Dump Boolean function in ITE format to file.
         This includes ITE of input1, input2 and input3.
         '''
-        pass
+        # dump file, add period before end of line
+        with open(self.output, 'wt') as out_f:
+            print("{}.".format(self.g_vtx.ite_expr), file=out_f)
+            print("{}.".format(self.h_vtx.ite_expr), file=out_f)
+            print("{}.".format(self.q_vtx.ite_expr), file=out_f)
 
 def main():
     '''Main funciton.
@@ -243,11 +302,8 @@ def main():
         sys.exit("Usage: python ROBDD.py <input1> <input2> <input3> <output>")
 
     print('CAD PA1 - ROBDD')
-    robdd = ROBDD(sys.argv[1:4])
+    robdd = ROBDD(sys.argv[1:5])
     robdd.run()
-
-
-
 
 if __name__ == '__main__':
     main()
