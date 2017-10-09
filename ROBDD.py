@@ -77,12 +77,12 @@ class ROBDD:
             for _ in range(in_cnt):
                 literal = f.readline().split()[0]
                 input_literals.append(literal)
-                logging.debug(literal)
+                # print(literal)
             # get output literals
             for _ in range(out_cnt):
                 literal = f.readline().split()[0]
                 output_literal = literal
-                logging.debug(literal)
+                # print(literal)
             # skip the and lines at the first parsing
             for _ in range(and_cnt):
                 f.readline()
