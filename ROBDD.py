@@ -26,6 +26,8 @@ class ROBDD:
         self.static_low = None
         self.static_high = None
         self.init_static_vertex() # initialize s0 (low) and s1 (high) for ROBDD
+        self.f_vtx = None # output of input1
+        self.g_vtx = None # output of input2
 
     def init_static_vertex(self):
         '''Create 0 and 1 vertices.
@@ -39,16 +41,18 @@ class ROBDD:
         '''1. Read AIG from two input files.
         2. Dump corresponding two ROBDD in ITE format.
         '''
-        self.build_from_aig(self.input1)
-        # self.build_from_aig(self.input2)
+        self.f_vtx = self.build_from_aig(self.input1)
+        self.g_vtx = self.build_from_aig(self.input2)
+        print("Input1: {}".format(self.f_vtx.ite_expr))
+        print("Input2: {}".format(self.g_vtx.ite_expr))
 
     def build_from_aig(self, aig_file):
         '''Build ROBDD described in a specified aig file.
         '''
         literal_to_vtx = {}
         uncreated_literals = defaultdict(list)
-        in_literals = []
-        out_literal = None
+        input_literals = []
+        output_literal = None
 
         with open(aig_file, 'r') as f:
             print('Parsing {}'.format(aig_file))
@@ -60,12 +64,12 @@ class ROBDD:
             # get input literals
             for _ in range(in_cnt):
                 literal = f.readline().split()[0]
-                in_literals.append(literal)
+                input_literals.append(literal)
                 print(literal)
             # get output literals
             for _ in range(out_cnt):
                 literal = f.readline().split()[0]
-                out_literal = literal
+                output_literal = literal
                 print(literal)
             # skip the and lines at the first parsing
             for _ in range(and_cnt):
@@ -74,7 +78,7 @@ class ROBDD:
             for _ in range(in_cnt + out_cnt):
                 type_, var = f.readline().split()[0:2]
                 pos = int(type_[1:])
-                literal = in_literals[pos]
+                literal = input_literals[pos]
                 # meet output or latch symbol, next loop
                 if type_.startswith('o') or type_.startswith('l'):
                     continue
@@ -82,7 +86,8 @@ class ROBDD:
                       type_.startswith('i')):
                     input_vtx = self.add_input_vtx(var)
                     print('    Create new input vertex: {} ({})'.format(input_vtx.var, literal))
-                assert input_vtx == self.uni_tbl[(var, self.static_low, self.static_high)], 'Error in setting input vertex'
+                    assert input_vtx == self.uni_tbl[(var, self.static_low, self.static_high)], 'Error in setting input vertex'
+                input_vtx = self.uni_tbl[(var, self.static_low, self.static_high)]
                 literal_to_vtx[literal] = input_vtx
                 # create inverted inputs e.g. literal 3, 5, 7...
                 inv_input_vtx = self.add_inv_vtx(input_vtx)
@@ -151,6 +156,7 @@ class ROBDD:
                         uncreated_literals[in_literal1].append((and_out_literal, in_literal1, in_literal2))
                     if in_literal2 not in literal_to_vtx:
                         uncreated_literals[in_literal2].append((and_out_literal, in_literal1, in_literal2))
+            return literal_to_vtx[output_literal]
 
     def add_input_vtx(self, var):
         '''Add input vertex if not created.
@@ -224,6 +230,11 @@ class ROBDD:
         else:
             raise TypeError("Expected lower restriction variable")
 
+    def dump(self, file):
+        '''Dump Boolean function in ITE format to file.
+        This includes ITE of input1, input2 and input3.
+        '''
+        pass
 
 def main():
     '''Main funciton.
