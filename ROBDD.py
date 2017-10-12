@@ -3,7 +3,11 @@
 '''
 
 import sys
+import logging
 from collections import defaultdict
+
+logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.DEBUG)
 
 class Vertex:
     '''Vertex in ROBDD.
@@ -73,12 +77,12 @@ class ROBDD:
             for _ in range(in_cnt):
                 literal = f.readline().split()[0]
                 input_literals.append(literal)
-                # print(literal)
+                logging.debug(literal)
             # get output literals
             for _ in range(out_cnt):
                 literal = f.readline().split()[0]
                 output_literal = literal
-                # print(literal)
+                logging.debug(literal)
             # skip the and lines at the first parsing
             for _ in range(and_cnt):
                 f.readline()
@@ -93,14 +97,14 @@ class ROBDD:
                 elif ((var, self.static_low, self.static_high) not in self.uni_tbl and
                       type_.startswith('i')):
                     input_vtx = self.add_input_vtx(var)
-                    # print('    Create new input vertex: {} ({})'.format(input_vtx.var, literal))
+                    logging.debug('    Create new input vertex: {} ({})'.format(input_vtx.var, literal))
                     assert input_vtx == self.uni_tbl[(var, self.static_low, self.static_high)], 'Error in setting input vertex'
                 input_vtx = self.uni_tbl[(var, self.static_low, self.static_high)]
                 literal_to_vtx[literal] = input_vtx
                 # create inverted inputs e.g. literal 3, 5, 7...
                 inv_input_vtx = self.add_inv_vtx(input_vtx)
                 literal_to_vtx[str(int(literal)+1)] = inv_input_vtx
-                # print('    Set neg input vertex: {} ({})'.format(inv_input_vtx.var, str(int(literal)+1)))
+                logging.debug('    Set neg input vertex: {} ({})'.format(inv_input_vtx.var, str(int(literal)+1)))
 
             # second parsing, skip input and output lines and parse only AND lines
             f.seek(0)
@@ -109,10 +113,10 @@ class ROBDD:
             # parse AND lines
             for _ in range(and_cnt):
                 out_literal, in_literal1, in_literal2 = f.readline().split()[0:3]
-                # print('{} {} {}'.format(out_literal, in_literal1, in_literal2))
+                logging.debug('{} {} {}'.format(out_literal, in_literal1, in_literal2))
                 if in_literal1 in literal_to_vtx and in_literal2 in literal_to_vtx:
-                    # print('    In2 {}'.format(literal_to_vtx[in_literal2].ite_expr))
-                    # print('    In1 {}'.format(literal_to_vtx[in_literal1].ite_expr))
+                    logging.debug('    In2 {}'.format(literal_to_vtx[in_literal2].ite_expr))
+                    logging.debug('    In1 {}'.format(literal_to_vtx[in_literal1].ite_expr))
                     # AND
                     vtx = self.ite(literal_to_vtx[in_literal1],
                                    literal_to_vtx[in_literal2], self.static_low, 'a')
@@ -124,12 +128,12 @@ class ROBDD:
 
                     literal_to_vtx[and_out_literal] = vtx
                     literal_to_vtx[inv_out_literal] = inv_vtx
-                    # print('    Set vertex: {} ({})'.format(vtx.ite_expr, and_out_literal))
-                    # print('    Set vertex: {} ({})'.format(inv_vtx.ite_expr, inv_out_literal))
+                    logging.debug('    Set vertex: {} ({})'.format(vtx.ite_expr, and_out_literal))
+                    logging.debug('    Set vertex: {} ({})'.format(inv_vtx.ite_expr, inv_out_literal))
 
                     if and_out_literal in uncreated_literals:
                         for (out_l, in_l1, in_l2) in uncreated_literals[and_out_literal]:
-                            # print('        To handle literal: {}'.format(out_l))
+                            logging.debug('        To handle literal: {}'.format(out_l))
                             if (in_l1 not in literal_to_vtx) or (in_l2 not in literal_to_vtx):
                                 continue
                             # AND
@@ -139,11 +143,11 @@ class ROBDD:
                             inv = self.add_inv_vtx(vtx)
                             literal_to_vtx[out_l] = vtx
                             literal_to_vtx[str(int(out_l)+1)] = inv
-                            # print('        Set vertex: {} ({})'.format(vtx.ite_expr, out_l))
-                            # print('        Set vertex: {} ({})'.format(inv.ite_expr, str(int(out_l)+1)))
+                            logging.debug('        Set vertex: {} ({})'.format(vtx.ite_expr, out_l))
+                            logging.debug('        Set vertex: {} ({})'.format(inv.ite_expr, str(int(out_l)+1)))
                     if inv_out_literal in uncreated_literals:
                         for (out_l, in_l1, in_l2) in uncreated_literals[inv_out_literal]:
-                            # print('        To handle unset literal: {}'.format(out_l))
+                            logging.debug('        To handle unset literal: {}'.format(out_l))
                             if (in_l1 not in literal_to_vtx) or (in_l2 not in literal_to_vtx):
                                 continue
                             # AND
@@ -153,8 +157,8 @@ class ROBDD:
                             inv = self.add_inv_vtx(vtx)
                             literal_to_vtx[out_l] = vtx
                             literal_to_vtx[str(int(out_l)+1)] = inv
-                            # print('        Set vertex: {} ({})'.format(vtx.ite_expr, out_l))
-                            # print('        Set vertex: {} ({})'.format(inv.ite_expr, str(int(out_l)+1)))
+                            logging.debug('        Set vertex: {} ({})'.format(vtx.ite_expr, out_l))
+                            logging.debug('        Set vertex: {} ({})'.format(inv.ite_expr, str(int(out_l)+1)))
                 else:
                     # consider that input literals may not be set and added to "literal_to_vtx" yet
                     # append input literals into "uncreated_literals" for further handling
@@ -213,7 +217,7 @@ class ROBDD:
                     ite_expr = 'ITE({}, {}, {})'.format(cur_var, new_high_vtx.ite_expr,
                                                         new_low_vtx.ite_expr)
                     new_vtx = Vertex(cur_var, ite_expr, new_low_vtx, new_high_vtx)
-                    # print("        Create new vertex: {}, lo: {}, hi: {}, as {}".format(cur_var, new_low_vtx.ite_expr, new_high_vtx.ite_expr, ite_expr))
+                    logging.debug("        Create new vertex: {}, lo: {}, hi: {}, as {}".format(cur_var, new_low_vtx.ite_expr, new_high_vtx.ite_expr, ite_expr))
                     self.uni_tbl[(cur_var, new_low_vtx, new_high_vtx)] = new_vtx
                     self.vertices.append(new_vtx)
                     return new_vtx
