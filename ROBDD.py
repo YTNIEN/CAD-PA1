@@ -301,15 +301,15 @@ class ROBDD:
             print("{}.".format(self.h_vtx.ite_expr), file=out_f)
             print("{}.".format(self.q_vtx.ite_expr), file=out_f)
 
-def main():
+def main(argv):
     '''Main funciton.
     '''
     if len(sys.argv) != 5:
         sys.exit("Usage: python ROBDD.py <input1> <input2> <input3> <output>")
 
     print('CAD PA1 - ROBDD')
-    robdd = ROBDD(sys.argv[1:5])
+    robdd = ROBDD(argv)
     robdd.run()
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:5])
